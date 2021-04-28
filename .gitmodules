@@ -1,0 +1,4 @@
+[submodule "legacy-search"]
+	path = legacy-search
+	url = git@github.com:hazelcast-demos/legacy-search.git
+	branch = 00-legacy
