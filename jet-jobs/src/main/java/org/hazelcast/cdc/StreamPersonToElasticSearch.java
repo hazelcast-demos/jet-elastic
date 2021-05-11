@@ -14,6 +14,7 @@ import com.hazelcast.jet.pipeline.StreamSource;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.RestClientBuilder;
+import org.json.JSONObject;
 
 import static com.hazelcast.jet.elastic.ElasticClients.client;
 
@@ -41,16 +42,15 @@ public class StreamPersonToElasticSearch {
         var pipeline = Pipeline.create();
         pipeline.readFrom(mysql())
                 .withIngestionTimestamps()
-                .peek(change -> new Random().nextInt(10) == 0, peekRecord)
+                .map(toJson)
+                .peek(json -> new Random().nextInt(10) == 0, peekJson)
                 .writeTo(elasticsearch());
         return pipeline;
     }
 
-    private final FunctionEx<ChangeRecord, String> peekRecord = change -> {
-        var key = change.key().toMap();
-        var value = change.value().toMap();
-        return "key: " + key + System.getProperty("line.separator") + "value:" + value;
-    };
+    private final FunctionEx<ChangeRecord, JSONObject> toJson = change -> new JSONObject(change.value().toJson());
+
+    private final FunctionEx<JSONObject, String> peekJson = json -> json.toString(4);
 
     private StreamSource<ChangeRecord> mysql() {
         var env = System.getenv();
@@ -69,16 +69,16 @@ public class StreamPersonToElasticSearch {
                 .build();
     }
 
-    private Sink<ChangeRecord> elasticsearch() {
+    private Sink<JSONObject> elasticsearch() {
         var env = System.getenv();
         var user = env.getOrDefault("ELASTICSEARCH_USER", "user");
         var password = env.getOrDefault("ELASTICSEARCH_PASSWORD", "password");
         var host = env.getOrDefault("ELASTICSEARCH_HOST", "localhost");
         var port = Integer.parseInt(env.getOrDefault("ELASTICSEARCH_PORT", "9200"));
         SupplierEx<RestClientBuilder> clientFn = () -> client(user, password, host, port);
-        FunctionEx<ChangeRecord, DocWriteRequest<?>> requestFn = change -> new IndexRequest("persons")
-                .id(change.key().toMap().get("id").toString())
-                .source(change.value().toMap());
+        FunctionEx<JSONObject, DocWriteRequest<?>> requestFn = json -> new IndexRequest("persons")
+                .id(String.valueOf(json.get("id")))
+                .source(json.toMap());
         return ElasticSinks.elastic(clientFn, requestFn);
     }
 }
