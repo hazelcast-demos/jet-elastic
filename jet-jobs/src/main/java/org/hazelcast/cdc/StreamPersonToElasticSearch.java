@@ -1,5 +1,6 @@
 package org.hazelcast.cdc;
 
+import java.util.Random;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.function.FunctionEx;
 import com.hazelcast.function.SupplierEx;
@@ -40,9 +41,16 @@ public class StreamPersonToElasticSearch {
         var pipeline = Pipeline.create();
         pipeline.readFrom(mysql())
                 .withIngestionTimestamps()
+                .peek(change -> new Random().nextInt(10) == 0, peekRecord)
                 .writeTo(elasticsearch());
         return pipeline;
     }
+
+    private final FunctionEx<ChangeRecord, String> peekRecord = change -> {
+        var key = change.key().toMap();
+        var value = change.value().toMap();
+        return "key: " + key + System.getProperty("line.separator") + "value:" + value;
+    };
 
     private StreamSource<ChangeRecord> mysql() {
         var env = System.getenv();
