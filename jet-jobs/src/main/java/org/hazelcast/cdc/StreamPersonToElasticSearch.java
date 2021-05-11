@@ -42,7 +42,7 @@ public class StreamPersonToElasticSearch {
         var pipeline = Pipeline.create();
         pipeline.readFrom(mysql())
                 .withIngestionTimestamps()
-                .map(toJson)
+                .map(toJson.andThen(new WithMarketingLabels()))
                 .peek(json -> new Random().nextInt(10) == 0, peekJson)
                 .writeTo(elasticsearch());
         return pipeline;
