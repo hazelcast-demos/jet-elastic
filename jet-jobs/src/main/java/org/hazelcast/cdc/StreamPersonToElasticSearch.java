@@ -1,22 +1,29 @@
 package org.hazelcast.cdc;
 
 import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.function.FunctionEx;
+import com.hazelcast.function.SupplierEx;
 import com.hazelcast.jet.cdc.ChangeRecord;
 import com.hazelcast.jet.cdc.mysql.MySqlCdcSources;
 import com.hazelcast.jet.config.JobConfig;
+import com.hazelcast.jet.elastic.ElasticSinks;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sink;
-import com.hazelcast.jet.pipeline.Sinks;
 import com.hazelcast.jet.pipeline.StreamSource;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.client.RestClientBuilder;
 
-public class StreamPersonToStdOut {
+import static com.hazelcast.jet.elastic.ElasticClients.client;
+
+public class StreamPersonToElasticSearch {
 
     private static final String DB_SERVER_NAME = "legacy";
     private static final String DB_SCHEMA = "person";
     private static final String DB_NAMESPACED_TABLE = DB_SCHEMA + ".person";
 
     public static void main(String[] args) {
-        var stream = new StreamPersonToStdOut();
+        var stream = new StreamPersonToElasticSearch();
         var pipeline = stream.pipeline();
         var client = HazelcastClient.newHazelcastClient();
         client.getJet().newJob(pipeline, stream.config());
@@ -25,7 +32,7 @@ public class StreamPersonToStdOut {
 
     private JobConfig config() {
         var config = new JobConfig();
-        config.addPackage(StreamPersonToStdOut.class.getPackageName());
+        config.addPackage(StreamPersonToElasticSearch.class.getPackageName());
         return config;
     }
 
@@ -54,7 +61,16 @@ public class StreamPersonToStdOut {
                 .build();
     }
 
-    private Sink<Object> elasticsearch() {
-        return Sinks.logger();
+    private Sink<ChangeRecord> elasticsearch() {
+        var env = System.getenv();
+        var user = env.getOrDefault("ELASTICSEARCH_USER", "user");
+        var password = env.getOrDefault("ELASTICSEARCH_PASSWORD", "password");
+        var host = env.getOrDefault("ELASTICSEARCH_HOST", "localhost");
+        var port = Integer.parseInt(env.getOrDefault("ELASTICSEARCH_PORT", "9200"));
+        SupplierEx<RestClientBuilder> clientFn = () -> client(user, password, host, port);
+        FunctionEx<ChangeRecord, DocWriteRequest<?>> requestFn = change -> new IndexRequest("persons")
+                .id(change.key().toMap().get("id").toString())
+                .source(change.value().toMap());
+        return ElasticSinks.elastic(clientFn, requestFn);
     }
 }
