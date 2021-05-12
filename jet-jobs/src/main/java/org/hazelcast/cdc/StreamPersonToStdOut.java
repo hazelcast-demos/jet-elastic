@@ -1,6 +1,6 @@
 package org.hazelcast.cdc;
 
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.jet.cdc.ChangeRecord;
 import com.hazelcast.jet.cdc.mysql.MySqlCdcSources;
 import com.hazelcast.jet.config.JobConfig;
@@ -18,8 +18,9 @@ public class StreamPersonToStdOut {
     public static void main(String[] args) {
         var stream = new StreamPersonToStdOut();
         var pipeline = stream.pipeline();
-        var instance = Hazelcast.bootstrappedInstance();
-        instance.getJet().newJob(pipeline, stream.config());
+        var client = HazelcastClient.newHazelcastClient();
+        client.getJet().newJob(pipeline, stream.config());
+        client.shutdown();
     }
 
     private JobConfig config() {
@@ -38,11 +39,15 @@ public class StreamPersonToStdOut {
 
     private StreamSource<ChangeRecord> mysql() {
         var env = System.getenv();
+        var host = env.getOrDefault("MYSQL_HOST", "localhost");
+        var port = Integer.parseInt(env.getOrDefault("MYSQL_PORT", "3306"));
+        var user = env.getOrDefault("MYSQL_USER", "root");
+        var password = env.getOrDefault("MYSQL_PASSWORD", "root");
         return MySqlCdcSources.mysql("mysql")
-                .setDatabaseAddress(env.getOrDefault("MYSQL_HOST", "localhost"))
-                .setDatabasePort(Integer.parseInt(env.getOrDefault("MYSQL_PORT", "3306")))
-                .setDatabaseUser(env.getOrDefault("MYSQL_USER", "root"))
-                .setDatabasePassword(env.getOrDefault("MYSQL_PASSWORD", "root"))
+                .setDatabaseAddress(host)
+                .setDatabasePort(port)
+                .setDatabaseUser(user)
+                .setDatabasePassword(password)
                 .setClusterName(DB_SERVER_NAME)
                 .setDatabaseWhitelist(DB_SCHEMA)
                 .setTableWhitelist(DB_NAMESPACED_TABLE)
