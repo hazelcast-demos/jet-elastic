@@ -8,9 +8,8 @@ import com.hazelcast.jet.cdc.ChangeRecord;
 import com.hazelcast.jet.cdc.mysql.MySqlCdcSources;
 import com.hazelcast.jet.config.JobConfig;
 import com.hazelcast.jet.elastic.ElasticSinks;
-import com.hazelcast.jet.pipeline.Pipeline;
-import com.hazelcast.jet.pipeline.Sink;
-import com.hazelcast.jet.pipeline.StreamSource;
+import com.hazelcast.jet.pipeline.*;
+import com.zaxxer.hikari.HikariDataSource;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.RestClientBuilder;
@@ -42,8 +41,14 @@ public class StreamPersonToElasticSearch {
         var pipeline = Pipeline.create();
         pipeline.readFrom(mysql())
                 .withIngestionTimestamps()
-                .map(toJson.andThen(new WithMarketingLabels()))
-                .peek(json -> new Random().nextInt(10) == 0, peekJson)
+                .map(toJson)
+                .mapUsingService(
+                        ServiceFactories.sharedService(
+                                new HikariConnectionPool(),
+                                HikariDataSource::close
+                        ).toNonCooperative(),
+                        new WithMarketingLabels()
+                ).peek(json -> new Random().nextInt(10) == 0, peekJson)
                 .writeTo(elasticsearch());
         return pipeline;
     }
