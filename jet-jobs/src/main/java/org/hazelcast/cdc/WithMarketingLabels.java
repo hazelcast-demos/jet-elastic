@@ -1,14 +1,14 @@
 package org.hazelcast.cdc;
 
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import com.hazelcast.function.FunctionEx;
+import com.hazelcast.function.BiFunctionEx;
+import com.zaxxer.hikari.HikariDataSource;
 import org.json.JSONObject;
 
-public class WithMarketingLabels implements FunctionEx<JSONObject, JSONObject> {
+public class WithMarketingLabels implements BiFunctionEx<HikariDataSource, JSONObject, JSONObject> {
 
     private static final List<String> MARKETING = List.of(
             "cars",
@@ -23,13 +23,8 @@ public class WithMarketingLabels implements FunctionEx<JSONObject, JSONObject> {
     );
 
     @Override
-    public JSONObject applyEx(JSONObject json) throws SQLException {
-        var env = System.getenv();
-        var host = env.getOrDefault("MYSQL_HOST", "localhost");
-        var port = env.getOrDefault("MYSQL_PORT", "3306");
-        var user = env.getOrDefault("MYSQL_USER", "root");
-        var password = env.getOrDefault("MYSQL_PASSWORD", "root");
-        try (var connection = DriverManager.getConnection("jdbc:mysql://" + host + ":" + port + "/person", user, password);
+    public JSONObject applyEx(HikariDataSource pool, JSONObject json) throws SQLException {
+        try (var connection = pool.getConnection();
              var statement = connection.prepareStatement("SELECT * FROM marketing WHERE id = ?")) {
             var marketingId = json.getInt("marketing_id");
             statement.setInt(1, marketingId);
